@@ -17,55 +17,66 @@ import numpy as np
 from scipy.optimize import minimize
 import collections
 
-dfTAZ = pd.read_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/testDataTAZ.csv', ',')
-dfHH = pd.read_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/testDataHH.csv', ',')
-dfDist = pd.read_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/tazDist.csv', ',')
-ALTS = 10  # CHANGE ME FOR EACH MODEL SPECIFICATION
-
-# Iterate over rows to generate sample set with 9 random samples. Need a UID for each situation.
-# I just use the first row id for each HH.
-for i, row in enumerate(dfHH.itertuples()):
-    # Define the results DataFrame
-    if row.memb_id == 0:
-        UID = i
-        if i == 0:
-            dfResult = dfHH[dfHH.hh_mem_id == row.hh_mem_id]
-            dfResult.loc[:, 'chosen'] = 1
-            dfResult.loc[:, 'UID'] = UID
-        else:
-            dfRow = dfHH[dfHH.hh_mem_id == row.hh_mem_id]
-            dfRow.loc[:, 'chosen'] = 1
-            dfRow.loc[:, 'UID'] = UID
-            dfResult = dfResult.append(dfRow)
-
-        # Remove records where the TAZ is the row respondent TAZ
-        dfSample = dfHH[dfHH.taz_struc != row.taz_struc]
-        # Sample ALTS-1 records from remaining records
-        dfSample = dfSample.sample(n=(ALTS-1))
-        # Need the additional rows for each sample hh for the other hh members
-        for samRow in dfSample.itertuples():
-            dfSubSample = dfHH[(dfHH.hh_id == samRow.hh_id) & (dfHH.hh_mem_id != samRow.hh_mem_id)]
-            dfSample = dfSample.append(dfSubSample)
-        dfSample.loc[:, 'taz_struc'] = row.taz_struc
-        dfSample.loc[:, 'taz'] = row.taz
-        dfSample.loc[:, 'chosen'] = 0
-        dfSample.loc[:, 'UID'] = UID
-        # Append the results together
-        dfResult = dfResult.append(dfSample)
-    else:
-        dfRow = dfHH[dfHH.hh_mem_id == row.hh_mem_id]
-        dfRow.loc[:, 'chosen'] = 1
-        dfRow.loc[:, 'UID'] = UID
-        dfResult = dfResult.append(dfRow)
+MAKE_DATA = 1 # CHANGE AFTER INITIAL MODEL RUN
 
 def drop_y(df):
     # list comprehension of the cols that end with '_y'
     to_drop = [x for x in df if x.endswith('_y')]
     df.drop(to_drop, axis=1, inplace=True)
 
-dfHH_TAZ = dfResult.merge(dfTAZ, how='left', on=['taz_struc'], suffixes=('', '_y'))
-drop_y(dfHH_TAZ)
-# dfHH_TAZ = dfHH_TAZ.sort_index(axis=0)
+if MAKE_DATA == 1:
+    dfTAZ = pd.read_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/testDataTAZ.csv', ',')
+    dfHH = pd.read_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/testDataHH.csv', ',')
+    dfIVTT = pd.read_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/aivtt.csv', ',', index_col='pq')
+    ALTS = 10  # CHANGE ME FOR EACH MODEL SPECIFICATION
+
+    # Iterate over rows to generate sample set with 9 random samples. Need a UID for each situation.
+    # I just use the first row id for each HH.
+    for i, row in enumerate(dfHH.itertuples()):
+        # Define the results DataFrame
+        if row.memb_id == 0:
+            UID = i
+            if i == 0:
+                dfResult = dfHH[dfHH.hh_mem_id == row.hh_mem_id]
+                dfResult.loc[:, 'chosen'] = 1
+                dfResult.loc[:, 'UID'] = UID
+            else:
+                dfRow = dfHH[dfHH.hh_mem_id == row.hh_mem_id]
+                dfRow.loc[:, 'chosen'] = 1
+                dfRow.loc[:, 'UID'] = UID
+                dfResult = dfResult.append(dfRow)
+
+            # Remove records where the TAZ is the row respondent TAZ
+            dfSample = dfHH[dfHH.taz_struc != row.taz_struc]
+            # Sample ALTS-1 records from remaining records
+            dfSample = dfSample.sample(n=(ALTS-1))
+            # Need the additional rows for each sample hh for the other hh members
+            for samRow in dfSample.itertuples():
+                dfSubSample = dfHH[(dfHH.hh_id == samRow.hh_id) & (dfHH.hh_mem_id != samRow.hh_mem_id)]
+                dfSample = dfSample.append(dfSubSample)
+            dfSample.loc[:, 'taz_struc'] = row.taz_struc
+            dfSample.loc[:, 'taz'] = row.taz
+            dfSample.loc[:, 'chosen'] = 0
+            dfSample.loc[:, 'UID'] = UID
+            # Append the results together
+            dfResult = dfResult.append(dfSample)
+        else:
+            dfRow = dfHH[dfHH.hh_mem_id == row.hh_mem_id]
+            dfRow.loc[:, 'chosen'] = 1
+            dfRow.loc[:, 'UID'] = UID
+            dfResult = dfResult.append(dfRow)
+
+    dfHH_TAZ = dfResult.merge(dfTAZ, how='left', on=['taz_struc'], suffixes=('', '_y'))
+    drop_y(dfHH_TAZ)
+    # Super kludgy IVTT method!
+    df1 = dfIVTT.loc[dfHH_TAZ.taz]
+    df2 = df1.transpose()
+    df3 = df2.loc[dfHH_TAZ.wtaz.astype(str)]
+    dfHH_TAZ['aivtt'] = np.diag(df3.values)
+    dfHH_TAZ.to_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/HH_TAZ.csv')
+
+else:
+    dfHH_TAZ = pd.read_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/HH_TAZ.csv', ',')
 
 # Income quintile thresholds in 2014 for Canada
 incomeQuins = [28900, 51700, 101100, 129400]
@@ -93,14 +104,7 @@ dfHH_TAZ['area'] = (dfHH_TAZ['own'] * dfHH_TAZ['areaO'] + (1 - dfHH_TAZ['own']) 
 dfHH_TAZ['price'] = (dfHH_TAZ['own'] * dfHH_TAZ['taz_priceO'] + (1 - dfHH_TAZ['own']) * dfHH_TAZ[
     'taz_priceO']) / 10 ** 2
 # hundreds of jobs in zone
-dfHH_TAZ['taz_job'] = np.log(dfHH_TAZ['taz_job'])
-#dfHH_TAZ['hw_auto_time'] = np.log(dfHH_TAZ['HW_Auto_Time'])
-
-# Create correspondence between home taz and work taz distance/time
-dfHH_TAZ = dfHH_TAZ.merge(dfDist, how='left', on=['taz','wtaz'])
-dfHH_TAZ.loc[:, 'dist'] = dfHH_TAZ['dist'].fillna(value=dfHH_TAZ['HW_Auto_Time'])
-dfHH_TAZ = dfHH_TAZ.replace(np.log(0), 0)
-
+dfHH_TAZ['taz_job'] = dfHH_TAZ['taz_job'] / 10**2
 
 # TO DO: Add weights by HH role
 beta_dict = collections.OrderedDict([('ASC_2', -1), ('ASC_3', -1), ('ASC_4', -1), ('ASC_5', -1), ('HOUSE_HH2+', -0.1),
@@ -118,8 +122,8 @@ def pcl_indiv_util(params):
         beta_dict[k] = params[i]
 
     # Define utility functions for each model
-    # V = beta_dict['HW_AUTO_TIME'] * dfDist.loc[dfHH_TAZ['taz'], dfHH_TAZ['wtaz']]
-    V = beta_dict['HW_AUTO_TIME'] * dfHH_TAZ['HW_Auto_Time']
+    V = beta_dict['HW_AUTO_TIME'] * dfHH_TAZ['aivtt']
+    #V = beta_dict['HW_AUTO_TIME'] * dfHH_TAZ['HW_Auto_Time']
 
     dummyHHRole = pd.get_dummies(dfHH_TAZ['hh_role'])
     dummyW = beta_dict['W_1'] * dummyHHRole[1] + beta_dict['W_2'] * dummyHHRole[2] + beta_dict['W_3'] * dummyHHRole[3] \
