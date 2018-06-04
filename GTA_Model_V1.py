@@ -19,6 +19,7 @@ import collections
 
 dfTAZ = pd.read_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/testDataTAZ.csv', ',')
 dfHH = pd.read_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/testDataHH.csv', ',')
+dfDist = pd.read_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/tazDist.csv', ',')
 ALTS = 10  # CHANGE ME FOR EACH MODEL SPECIFICATION
 
 # Iterate over rows to generate sample set with 9 random samples. Need a UID for each situation.
@@ -92,14 +93,20 @@ dfHH_TAZ['area'] = (dfHH_TAZ['own'] * dfHH_TAZ['areaO'] + (1 - dfHH_TAZ['own']) 
 dfHH_TAZ['price'] = (dfHH_TAZ['own'] * dfHH_TAZ['taz_priceO'] + (1 - dfHH_TAZ['own']) * dfHH_TAZ[
     'taz_priceO']) / 10 ** 2
 # hundreds of jobs in zone
-# dfHH_TAZ['taz_job'] = np.log(dfHH_TAZ['taz_job'])
-dfHH_TAZ['HW_Auto_Time'] = np.log(dfHH_TAZ['HW_Auto_Time'])
+dfHH_TAZ['taz_job'] = np.log(dfHH_TAZ['taz_job'])
+#dfHH_TAZ['hw_auto_time'] = np.log(dfHH_TAZ['HW_Auto_Time'])
+
+# Create correspondence between home taz and work taz distance/time
+dfHH_TAZ = dfHH_TAZ.merge(dfDist, how='left', on=['taz','wtaz'])
+dfHH_TAZ.loc[:, 'dist'] = dfHH_TAZ['dist'].fillna(value=dfHH_TAZ['HW_Auto_Time'])
+dfHH_TAZ = dfHH_TAZ.replace(np.log(0), 0)
+
 
 # TO DO: Add weights by HH role
 beta_dict = collections.OrderedDict([('ASC_2', -1), ('ASC_3', -1), ('ASC_4', -1), ('ASC_5', -1), ('HOUSE_HH2+', -0.1),
                                     ('H_H_INC', 0.01), ('L_H_INC', -0.01), ('AREA', 0.01), ('JOBS', 0.01), ('SCHOOLS', 0.01),
                                     ('HW_AUTO_TIME', -0.01), ('W_1', 0.01), ('W_2', 0.01), ('W_3', 0.01),
-                                    ('W_4', 0.01), ('W_7', 0.01), ('GAMMA', 75), ('ALPHA', -20), ('SIGMA', -2)])
+                                    ('W_4', 0.01), ('W_7', 0.01), ('GAMMA', 75), ('ALPHA', -1), ('SIGMA', -5)])
 
 params = beta_dict.values()
 
@@ -111,6 +118,7 @@ def pcl_indiv_util(params):
         beta_dict[k] = params[i]
 
     # Define utility functions for each model
+    # V = beta_dict['HW_AUTO_TIME'] * dfDist.loc[dfHH_TAZ['taz'], dfHH_TAZ['wtaz']]
     V = beta_dict['HW_AUTO_TIME'] * dfHH_TAZ['HW_Auto_Time']
 
     dummyHHRole = pd.get_dummies(dfHH_TAZ['hh_role'])
@@ -128,7 +136,8 @@ def pcl_indiv_util(params):
     drop_y(dfHH_TAZ)
     dfHH_TAZ = dfHH_TAZ.sort_index(axis=0)
 
-    W = dfHH_TAZ['W'] / dfHH_TAZ['W_sum']
+    #W = dfHH_TAZ['W'] / dfHH_TAZ['W_sum']
+    W = 1 / dfHH_TAZ['hh_count']
 
     V = V * W
 
@@ -140,13 +149,11 @@ def pcl_group_util(params):
     for i, k in enumerate(beta_dict):
         beta_dict[k] = params[i]
     # Define utility functions for each model. Total jobs blows this up! Maybe log jobs...
-    # V = beta_dict['HOUSE_HH2+'] * dfHH_TAZ['house_hh2+'] + beta_dict['H_H_INC'] * dfHH_TAZ['h_h_inc'] \
-    #    + beta_dict['L_H_INC'] * dfHH_TAZ['l_h_inc'] + beta_dict['AREA'] * dfHH_TAZ['area'] \
-    #    + beta_dict['ASC_2'] * dfHH_TAZ['ASC2'] + beta_dict['ASC_3'] * dfHH_TAZ['ASC3'] \
-    #    + beta_dict['ASC_4'] * dfHH_TAZ['ASC4'] + beta_dict['ASC_5'] * dfHH_TAZ['ASC5']
-
-    V = beta_dict['ASC_2'] * dfHH_TAZ['ASC2'] + beta_dict['ASC_3'] * dfHH_TAZ['ASC3'] \
-        + beta_dict['ASC_4'] * dfHH_TAZ['ASC4'] + beta_dict['ASC_5'] * dfHH_TAZ['ASC5']
+    V = beta_dict['HOUSE_HH2+'] * dfHH_TAZ['house_hh2+'] + beta_dict['H_H_INC'] * dfHH_TAZ['h_h_inc'] \
+        + beta_dict['L_H_INC'] * dfHH_TAZ['l_h_inc'] + beta_dict['AREA'] * dfHH_TAZ['area'] \
+        + beta_dict['JOBS'] * dfHH_TAZ['taz_job'] + beta_dict['ASC_2'] * dfHH_TAZ['ASC2'] \
+        + beta_dict['ASC_3'] * dfHH_TAZ['ASC3'] + beta_dict['ASC_4'] * dfHH_TAZ['ASC4'] \
+        + beta_dict['ASC_5'] * dfHH_TAZ['ASC5']
 
     return V
 
@@ -197,16 +204,16 @@ def br_vals(params):
 
     return pF
 
-
 def bc_mod(params):
     # Get probabilies for location choice component of model
     LOC_PROB = pcl_probs(params)
 
     # Get bid-rents for price component of model
-    BID_RENT = br_vals(params)
+    #BID_RENT = br_vals(params)
 
     # Assemble log likelihood function
-    LP_BR = np.log(LOC_PROB['P']*BID_RENT)
+    #LP_BR = np.log(LOC_PROB['P']*BID_RENT)
+    LP_BR = np.log(LOC_PROB['P'])
     llfun = LP_BR*LOC_PROB['chosen']
     llfun = llfun.sum()
     return -1 * llfun
