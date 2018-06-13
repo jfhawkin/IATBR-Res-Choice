@@ -31,7 +31,7 @@ if MAKE_DATA == 1:
     dfHH = pd.read_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/testDataHH.csv', ',')
     dfAIVTT = pd.read_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/aivtt.csv', ',', index_col='pq')
     dfTIVTT = pd.read_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/tivtt.csv', ',', index_col='pq')
-    ALTS = 10  # CHANGE ME FOR EACH MODEL SPECIFICATION
+    ALTS = 30  # CHANGE ME FOR EACH MODEL SPECIFICATION
 
     # Iterate over rows to generate sample set with 9 random samples. Need a UID for each situation.
     # I just use the first row id for each HH.
@@ -90,13 +90,13 @@ else:
 incomeQuins = [28900, 51700, 101100, 129400]
 
 # Adjust variables to scale parameters and create derived variables
-# ASC2
+# # ASC2
 dfHH_TAZ['ASC2'] = ((dfHH_TAZ['hh_income'] < incomeQuins[1]) & (dfHH_TAZ['hh_income'] >= incomeQuins[0])).astype(int)
-# ASC3
+# # ASC3
 dfHH_TAZ['ASC3'] = ((dfHH_TAZ['hh_income'] < incomeQuins[2]) & (dfHH_TAZ['hh_income'] >= incomeQuins[1])).astype(int)
-# ASC4
+# # ASC4
 dfHH_TAZ['ASC4'] = ((dfHH_TAZ['hh_income'] < incomeQuins[3]) & (dfHH_TAZ['hh_income'] >= incomeQuins[2])).astype(int)
-# ASC5
+# # ASC5
 dfHH_TAZ['ASC5'] = (dfHH_TAZ['hh_income'] > incomeQuins[3]).astype(int)
 # house and more than 2 HH members
 dfHH_TAZ['house_hh2+'] = ((dfHH_TAZ['struc_type'] == 1) * (dfHH_TAZ['hh_size'] > 2)).astype(int)
@@ -113,30 +113,26 @@ dfHH_TAZ['price'] = (dfHH_TAZ['own'] * dfHH_TAZ['taz_priceO'] + (1 - dfHH_TAZ['o
 dfHH_TAZ['taz_job'] = (dfHH_TAZ['taz_job'] * np.log(dfHH_TAZ['hh_count'])) / 10**3
 # tens of dollars parking cost
 dfHH_TAZ['work_park_cost'] = dfHH_TAZ['work_park_cost'] / 10
-# Number of schools interacted with number of children
-# dfHH_TAZ['taz_school'] = dfHH_TAZ['taz_school'] * np.log(dfHH_TAZ['children'])
-dfHH_TAZ['taz_school'] = np.log(dfHH_TAZ['taz_school'] + dfHH_TAZ['taz_childcare']) * dfHH_TAZ['children']
-# dfHH_TAZ['taz_school'] = np.log(dfHH_TAZ['taz_school']) * (dfHH_TAZ['children']>0).astype(int)
+dfHH_TAZ['taz_school'] = np.log(dfHH_TAZ['taz_school']) * (dfHH_TAZ['children'] > 0).astype(int)
 # Number of childcare interacted with number of children
 # dfHH_TAZ['taz_childcare'] = np.log(dfHH_TAZ['taz_childcare']) * dfHH_TAZ['children']
-dfHH_TAZ['taz_childcare'] = np.log(dfHH_TAZ['taz_childcare']) * (dfHH_TAZ['children']>0).astype(int)
+dfHH_TAZ['taz_childcare'] = np.log(dfHH_TAZ['taz_childcare']) * (dfHH_TAZ['children'] > 0).astype(int)
 # Portion of taz zoned park x log of number children
 # dfHH_TAZ['zone_park'] = dfHH_TAZ['zone_park'] * np.log(dfHH_TAZ['travel_walk_bike'])
 # Transit stations and whether individual has transit pass
 dfHH_TAZ['go_transit_pass'] = dfHH_TAZ['transit_pass'] * dfHH_TAZ['Ct_GO']
 dfHH_TAZ['ttc_transit_pass'] = dfHH_TAZ['transit_pass'] * dfHH_TAZ['Ct_TTC']
+# Interact own with HH income
+#dfHH_TAZ['delta_area'] = dfHH_TAZ['delta_area'] * dfHH_TAZ['taz_school']
 
 # Log of zero will give nan error, so add the zeros back to avoid model errors
 dfHH_TAZ = dfHH_TAZ.fillna(value=0)
-dfHH_TAZ = dfHH_TAZ.replace(np.NINF, 0)
-dfHH_TAZ = dfHH_TAZ.replace(np.inf, 0)
-
-beta_dict = collections.OrderedDict([('ASC_2', -0.0105), ('ASC_3', 2.0655), ('ASC_4', 2.9844), ('ASC_5', 3.1411), ('HOUSE_HH2+', 0.2351),
+beta_dict = collections.OrderedDict([('ASC', -0.0105), ('HOUSE_HH2+', 0.2351),
                                     ('H_H_INC', 0.7359), ('L_H_INC', -0.7359), ('HW_DIST_INC', -2.9908), ('AREA', 0.1682),
-                                    ('OWN', 0), ('HW_AUTO_TIME', -0.0226), ('PARK_COST', 0.0015), ('GO', 0), ('TTC', 0),
-                                    ('FREQ_DRIVE', 1.6823), ('HW_SAME', 0.01), ('VEH_LIC', 0),
-                                    ('DELTA_AREA', 0), ('CARE', 0.0541),('W_1', -1.1373), ('W_2', -0.7219), ('W_3', -0.0253),
-                                    ('GAMMA', 0.1422), ('ALPHA', 10.0436), ('SIGMA',  0.2631)])
+                                    ('HW_AUTO_TIME', -0.0226), ('PARK_COST', 0.0015), ('TTC', 0), ('FREQ_DRIVE', 1.6823),
+                                    ('HW_SAME', 0.01), ('VEH_LIC', 0), ('DELTA_AREA', 0), ('W_R1F', -1.1373),
+                                    ('W_R1NF', -1.1373), ('W_R2F', -0.7219), ('W_R2NF', -0.7219), ('W_R3', -0.0253), ('W_R4', -0.0253),
+                                     ('GAMMA', 0.1422), ('ALPHA', 10.0436), ('SIGMA',  0.2631)])
 
 params = beta_dict.values()
 
@@ -149,12 +145,14 @@ def pcl_indiv_util(params):
 
     # Define utility functions for each model (weighted)
     V = beta_dict['HW_AUTO_TIME'] * dfHH_TAZ['aivtt'] + beta_dict['PARK_COST'] * dfHH_TAZ['work_park_cost'] \
-        + beta_dict['FREQ_DRIVE'] * dfHH_TAZ['freq_drive'] + beta_dict['GO'] * dfHH_TAZ['go_transit_pass'] \
+        + beta_dict['FREQ_DRIVE'] * dfHH_TAZ['freq_drive'] + beta_dict['TTC'] * dfHH_TAZ['go_transit_pass'] \
         + beta_dict['TTC'] * dfHH_TAZ['ttc_transit_pass'] + beta_dict['HW_SAME'] * dfHH_TAZ['hw_region'] \
         + beta_dict['HW_DIST_INC'] * dfHH_TAZ['hw_dist_inc']
 
     dummyHHRole = pd.get_dummies(dfHH_TAZ['hh_role'])
-    dummyW = beta_dict['W_1'] * dummyHHRole[1] + beta_dict['W_2'] * dummyHHRole[2] + beta_dict['W_3'] * dummyHHRole[3]
+    dummyW = beta_dict['W_R1F'] * dummyHHRole[1] * (dfHH_TAZ['children'] > 0).astype(int) + beta_dict['W_R1NF'] * dummyHHRole[1] * (dfHH_TAZ['children'] == 0).astype(int) \
+             + beta_dict['W_R2F'] * dummyHHRole[2] * (dfHH_TAZ['children'] > 0).astype(int) + beta_dict['W_R2NF'] * dummyHHRole[2] * (dfHH_TAZ['children'] == 0).astype(int) \
+             + beta_dict['W_R3'] * dummyHHRole[3] + beta_dict['W_R4'] * dummyHHRole[4]
     dummyW = np.exp(dummyW)
 
     dfHH_TAZ.loc[:, 'W'] = dummyW
@@ -181,10 +179,9 @@ def pcl_group_util(params):
         beta_dict[k] = params[i]
     # Define utility functions for each model. Total jobs blows this up! Maybe log jobs...
     V = beta_dict['HOUSE_HH2+'] * dfHH_TAZ['house_hh2+'] + beta_dict['H_H_INC'] * dfHH_TAZ['h_h_inc']  \
-        + beta_dict['AREA'] * dfHH_TAZ['area'] + beta_dict['OWN'] * dfHH_TAZ['own'] \
+        + beta_dict['AREA'] * dfHH_TAZ['area'] \
         + beta_dict['L_H_INC'] * dfHH_TAZ['l_h_inc'] + beta_dict['VEH_LIC'] * dfHH_TAZ['hh_veh_per_licensed_com'] \
-        + beta_dict['DELTA_AREA'] * dfHH_TAZ['delta_area'] + beta_dict['ASC_2'] * dfHH_TAZ['ASC2'] + beta_dict['ASC_3'] * dfHH_TAZ['ASC3'] \
-        + beta_dict['ASC_4'] * dfHH_TAZ['ASC4'] + beta_dict['ASC_5'] * dfHH_TAZ['ASC5']
+        + beta_dict['DELTA_AREA'] * dfHH_TAZ['delta_area'] + beta_dict['ASC'] * dfHH_TAZ['own']
 
     return V
 
@@ -263,6 +260,13 @@ res_df['loglike'] = -1 * res.fun
 res_df = res_df.round(4)
 
 print(res_df)
+cov_mat = pd.DataFrame(res.hess_inv)
+cov_mat.to_csv('cov_mat_9.csv')
+sd = sd[:, np.newaxis]
+sdt = np.transpose(sd)
+corr_mat = pd.DataFrame(res.hess_inv / np.multiply(sd,sdt))
+corr_mat.to_csv('corr_mat_9.csv')
+
 #print(res.hess_inv)
 # res_df.to_latex('./params.txt')
 #
