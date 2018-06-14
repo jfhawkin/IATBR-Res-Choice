@@ -31,7 +31,7 @@ if MAKE_DATA == 1:
     dfHH = pd.read_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/testDataHH.csv', ',')
     dfAIVTT = pd.read_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/aivtt.csv', ',', index_col='pq')
     dfTIVTT = pd.read_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/tivtt.csv', ',', index_col='pq')
-    ALTS = 30  # CHANGE ME FOR EACH MODEL SPECIFICATION
+    ALTS = 15  # CHANGE ME FOR EACH MODEL SPECIFICATION
 
     # Iterate over rows to generate sample set with 9 random samples. Need a UID for each situation.
     # I just use the first row id for each HH.
@@ -50,10 +50,15 @@ if MAKE_DATA == 1:
                 dfResult = dfResult.append(dfRow)
 
             # Remove records where the TAZ is the row respondent TAZ
-            # dfSample = dfHH[(dfHH.taz_struc != row.taz_struc) & (dfHH.home_region_id == row.home_region_id)]
             dfSample = dfHH[dfHH.taz_struc != row.taz_struc]
-            # Sample ALTS-1 records from remaining records
-            dfSample = dfSample.sample(n=(ALTS-1))
+            # Sample records from sample region
+            dfSample1 = dfSample[dfSample.home_region_id == row.home_region_id]
+            # Sample records from same income quintile
+            dfSample2 = dfSample[dfSample.inc_med == row.inc_med]
+            # Sample ALTS records from remaining records
+            dfSample1 = dfSample1.sample(n=ALTS)
+            dfSample2 = dfSample2.sample(n=ALTS)
+            dfSample = dfSample1.append(dfSample2)
             # Need the additional rows for each sample hh for the other hh members
             for samRow in dfSample.itertuples():
                 dfSubSample = dfHH[(dfHH.hh_id == samRow.hh_id) & (dfHH.hh_mem_id != samRow.hh_mem_id)]
@@ -82,23 +87,25 @@ if MAKE_DATA == 1:
     df5 = df4.transpose()
     df6 = df5.loc[dfHH_TAZ.wtaz.astype(str)]
     dfHH_TAZ['tivtt'] = np.diag(df6.values)
-    dfHH_TAZ.to_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/HH_TAZ_30sam.csv')
+    dfHH_TAZ.to_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/HH_TAZ_30imp.csv')
 
 else:
-    dfHH_TAZ = pd.read_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/HH_TAZ_30sam.csv', ',')
+    dfHH_TAZ = pd.read_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/HH_TAZ_30imp.csv', ',')
 
 # Income quintile thresholds in 2014 for Canada
 incomeQuins = [28900, 51700, 101100, 129400]
+# Income median 2014 for Ontarion 74287
 
 # Adjust variables to scale parameters and create derived variables
+dummyInc = pd.get_dummies(dfHH_TAZ['income_grp'])
 # # ASC2
-dfHH_TAZ['ASC2'] = ((dfHH_TAZ['hh_income'] < incomeQuins[1]) & (dfHH_TAZ['hh_income'] >= incomeQuins[0])).astype(int)
+dfHH_TAZ['ASC2'] = dummyInc[2]
 # # ASC3
-dfHH_TAZ['ASC3'] = ((dfHH_TAZ['hh_income'] < incomeQuins[2]) & (dfHH_TAZ['hh_income'] >= incomeQuins[1])).astype(int)
+dfHH_TAZ['ASC3'] = dummyInc[3]
 # # ASC4
-dfHH_TAZ['ASC4'] = ((dfHH_TAZ['hh_income'] < incomeQuins[3]) & (dfHH_TAZ['hh_income'] >= incomeQuins[2])).astype(int)
+dfHH_TAZ['ASC4'] = dummyInc[4]
 # # ASC5
-dfHH_TAZ['ASC5'] = (dfHH_TAZ['hh_income'] > incomeQuins[3]).astype(int)
+dfHH_TAZ['ASC5'] = dummyInc[5]
 # house and more than 2 HH members
 dfHH_TAZ['house_hh2+'] = ((dfHH_TAZ['struc_type'] == 1) * (dfHH_TAZ['hh_size'] > 2)).astype(int)
 # high income HH and high income TAZ
@@ -146,8 +153,8 @@ def pcl_indiv_util(params):
 
     # Define utility functions for each model (weighted)
     V = beta_dict['HW_AUTO_TIME'] * dfHH_TAZ['aivtt'] + beta_dict['PARK_COST'] * dfHH_TAZ['work_park_cost'] \
-        + beta_dict['FREQ_DRIVE'] * dfHH_TAZ['freq_drive'] + beta_dict['TTC'] * dfHH_TAZ['go_transit_pass'] \
-        + beta_dict['TTC'] * dfHH_TAZ['ttc_transit_pass'] + beta_dict['HW_SAME'] * dfHH_TAZ['hw_region'] \
+        + beta_dict['FREQ_DRIVE'] * dfHH_TAZ['freq_drive'] + beta_dict['TRANSIT'] * dfHH_TAZ['go_transit_pass'] \
+        + beta_dict['TRANSIT'] * dfHH_TAZ['ttc_transit_pass'] + beta_dict['HW_SAME'] * dfHH_TAZ['hw_region'] \
         + beta_dict['HW_DIST_INC'] * dfHH_TAZ['hw_dist_inc']
 
     dummyHHRole = pd.get_dummies(dfHH_TAZ['hh_role'])
@@ -181,7 +188,8 @@ def pcl_group_util(params):
     V = beta_dict['HOUSE_HH2+'] * dfHH_TAZ['house_hh2+'] + beta_dict['H_H_INC'] * dfHH_TAZ['h_h_inc']  \
         + beta_dict['AREA'] * dfHH_TAZ['area'] \
         + beta_dict['L_H_INC'] * dfHH_TAZ['l_h_inc'] + beta_dict['VEH_LIC'] * dfHH_TAZ['hh_veh_per_licensed_com'] \
-        + beta_dict['DELTA_AREA'] * dfHH_TAZ['delta_area'] + beta_dict['OWN'] * dfHH_TAZ['own']
+        + beta_dict['DELTA_AREA'] * dfHH_TAZ['delta_area'] + beta_dict['OWN'] * dfHH_TAZ['own'] \
+        + dfHH_TAZ['samp_region'] + dfHH_TAZ['samp_inc']
 
     return V
 
