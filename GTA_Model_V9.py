@@ -19,7 +19,7 @@ from scipy.optimize import minimize
 import collections
 from scipy.stats import norm
 
-MAKE_DATA = 0 # CHANGE AFTER INITIAL MODEL RUN
+MAKE_DATA = 1 # CHANGE AFTER INITIAL MODEL RUN
 
 def drop_y(df):
     # list comprehension of the cols that end with '_y'
@@ -50,6 +50,7 @@ if MAKE_DATA == 1:
                 dfResult = dfResult.append(dfRow)
 
             # Remove records where the TAZ is the row respondent TAZ
+            # dfSample = dfHH[(dfHH.taz_struc != row.taz_struc) & (dfHH.home_region_id == row.home_region_id)]
             dfSample = dfHH[dfHH.taz_struc != row.taz_struc]
             # Sample ALTS-1 records from remaining records
             dfSample = dfSample.sample(n=(ALTS-1))
@@ -81,10 +82,10 @@ if MAKE_DATA == 1:
     df5 = df4.transpose()
     df6 = df5.loc[dfHH_TAZ.wtaz.astype(str)]
     dfHH_TAZ['tivtt'] = np.diag(df6.values)
-    dfHH_TAZ.to_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/HH_TAZ.csv')
+    dfHH_TAZ.to_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/HH_TAZ_30sam.csv')
 
 else:
-    dfHH_TAZ = pd.read_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/HH_TAZ.csv', ',')
+    dfHH_TAZ = pd.read_csv('/home/jason/Documents/Conference Submissions/IATBR2018/data/HH_TAZ_30sam.csv', ',')
 
 # Income quintile thresholds in 2014 for Canada
 incomeQuins = [28900, 51700, 101100, 129400]
@@ -127,11 +128,11 @@ dfHH_TAZ['ttc_transit_pass'] = dfHH_TAZ['transit_pass'] * dfHH_TAZ['Ct_TTC']
 
 # Log of zero will give nan error, so add the zeros back to avoid model errors
 dfHH_TAZ = dfHH_TAZ.fillna(value=0)
-beta_dict = collections.OrderedDict([('ASC', -0.0105), ('HOUSE_HH2+', 0.2351),
+beta_dict = collections.OrderedDict([('OWN', -0.0105), ('HOUSE_HH2+', 0.2351),
                                     ('H_H_INC', 0.7359), ('L_H_INC', -0.7359), ('HW_DIST_INC', -2.9908), ('AREA', 0.1682),
-                                    ('HW_AUTO_TIME', -0.0226), ('PARK_COST', 0.0015), ('TTC', 0), ('FREQ_DRIVE', 1.6823),
-                                    ('HW_SAME', 0.01), ('VEH_LIC', 0), ('DELTA_AREA', 0), ('W_R1F', -1.1373),
-                                    ('W_R1NF', -1.1373), ('W_R2F', -0.7219), ('W_R2NF', -0.7219), ('W_R3', -0.0253), ('W_R4', -0.0253),
+                                    ('HW_AUTO_TIME', -0.0226), ('PARK_COST', 0.0015), ('TRANSIT', 0), ('FREQ_DRIVE', 1.6823),
+                                    ('HW_SAME', 0.01), ('VEH_LIC', 0), ('DELTA_AREA', 0), ('W_R1', -1.1373),
+                                    ('W_R2', -1.1373), ('W_R3', -0.7219), ('W_R4', -0.7219), ('W_FAM', -0.0253),
                                      ('GAMMA', 0.1422), ('ALPHA', 10.0436), ('SIGMA',  0.2631)])
 
 params = beta_dict.values()
@@ -150,9 +151,8 @@ def pcl_indiv_util(params):
         + beta_dict['HW_DIST_INC'] * dfHH_TAZ['hw_dist_inc']
 
     dummyHHRole = pd.get_dummies(dfHH_TAZ['hh_role'])
-    dummyW = beta_dict['W_R1F'] * dummyHHRole[1] * (dfHH_TAZ['children'] > 0).astype(int) + beta_dict['W_R1NF'] * dummyHHRole[1] * (dfHH_TAZ['children'] == 0).astype(int) \
-             + beta_dict['W_R2F'] * dummyHHRole[2] * (dfHH_TAZ['children'] > 0).astype(int) + beta_dict['W_R2NF'] * dummyHHRole[2] * (dfHH_TAZ['children'] == 0).astype(int) \
-             + beta_dict['W_R3'] * dummyHHRole[3] + beta_dict['W_R4'] * dummyHHRole[4]
+    dummyW = beta_dict['W_R1'] * dummyHHRole[1] * (1-(dfHH_TAZ['hh_role'] == 0).astype(int)) + beta_dict['W_R2'] * dummyHHRole[2] * (1-(dfHH_TAZ['hh_role'] == 0).astype(int)) \
+             + beta_dict['W_R3'] * dummyHHRole[3] * (1-(dfHH_TAZ['hh_role'] == 0).astype(int)) + beta_dict['W_R4'] * dummyHHRole[4] * (1-(dfHH_TAZ['hh_role'] == 0).astype(int))
     dummyW = np.exp(dummyW)
 
     dfHH_TAZ.loc[:, 'W'] = dummyW
@@ -181,7 +181,7 @@ def pcl_group_util(params):
     V = beta_dict['HOUSE_HH2+'] * dfHH_TAZ['house_hh2+'] + beta_dict['H_H_INC'] * dfHH_TAZ['h_h_inc']  \
         + beta_dict['AREA'] * dfHH_TAZ['area'] \
         + beta_dict['L_H_INC'] * dfHH_TAZ['l_h_inc'] + beta_dict['VEH_LIC'] * dfHH_TAZ['hh_veh_per_licensed_com'] \
-        + beta_dict['DELTA_AREA'] * dfHH_TAZ['delta_area'] + beta_dict['ASC'] * dfHH_TAZ['own']
+        + beta_dict['DELTA_AREA'] * dfHH_TAZ['delta_area'] + beta_dict['OWN'] * dfHH_TAZ['own']
 
     return V
 
